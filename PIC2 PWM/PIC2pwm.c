@@ -28,19 +28,23 @@ void init();
 
 unsigned int x = 0;							   // Analogwert AN0 (Vorgabe durch Poti)
 unsigned int y = 0;							   // Analogwert AN7 (Istwert des PWM-Mittelwerts am RC-Glied)
-unsigned char Analog_text1[20] = "AnalogIn ="; // Analogwert AN0 (Poti)  16 Zeichen pro Zeile
-unsigned char Analog_text2[20] = "AnalogOut="; // Analogwert AN7 (Istwert des PWM-Mittelwerts am RC-Glied)
+unsigned char LCDtext1[20] = "AnalogIn ="; // Analogwert AN0 (Poti)  16 Zeichen pro Zeile
+unsigned char LCDtext2[20] = "AnalogOut="; // Analogwert AN7 (Istwert des PWM-Mittelwerts am RC-Glied)
 unsigned char leer[] = "                ";
 
 void init()
 {
 	// IO Ports
 
-	TRISC = 0xFB; // 0b11111011;
-	TRISE = 0x7;  // 0b111;
+	TRISAbits.TRISA0=1;		//RA0 als Eingang für Poti
+	TRISEbits.TRISE2=1;		
+	TRISCbits.TRISC2=0;		// RC2 als Ausgang für PWM
 
-	// RC2 als Ausgang für PWM
-	TRISC2 = 0;
+	// TRISC = 0xFB; // 0b11111011;
+	// TRISE = 0x7;  // 0b111;
+
+	// // RC2 als Ausgang für PWM
+	// TRISC2 = 0;
 
 #ifndef Simulator // LCD-Initialisierung mit Portzuweisung RA<3:1> und RD<3:0>
 	lcd_init();	  // Alle LCD-Funktionen werden f�r die Simulation herausgenommen,
@@ -51,11 +55,11 @@ void init()
 	CCP1CON = 0b00001100;
 
 	// Timer 2 Einstellungen 1:4
-	T2CON = 0b00000101;
+	T2CON = 0b00000110;
+	TMR2 = 0xFF // PWM Frequenz einstellen
 
 	// A/D-Umsetzer Einstellungen
 	ADCON0 = 0x81;
-
 	// 0000 1110
 	ADCON1 = 0x0E;
 }
@@ -76,14 +80,15 @@ void main()
 			// Berechnung von x
 			x = ADRES >> 6;
 
-			// Duty Cycle f�r PWM  einstellen
-			CCP1CON = CCP1CON | (ADRESL >> 2); //CCp1con hat die LSB von 10bit PWM signal, dann ADRESL als maske verwenden!
+			// Duty Cycle für PWM  einstellen
 			CCPR1L = ADRESH;
 
-			// Channel 7 ausw�hlen
-			ADCON0bits.CHS2 = 1;
-			ADCON0bits.CHS1 = 1;
-			ADCON0bits.CHS0 = 1;
+
+			CCP1CON = CCP1CON | (ADRESL >> 2); //CCp1con hat die LSB von 10bit PWM signal, dann ADRESL als maske verwenden!
+			T2CONbits.TMR2ON=1;
+
+			// Kanal 7 auswählen
+			ADCON0 = 0b10111001;		//Fosc/32 und AN7 und ADON = 1
 		}
 		// Analogkanal 7 wurde eingelesen (RC-Ausgang Istwert)
 		else if (ADCON0bits.CHS2 && ADCON0bits.CHS1 && ADCON0bits.CHS0)
@@ -91,30 +96,25 @@ void main()
 			// Berechnung von y
 			y = ADRES >> 6;
 
-			// Channel 0 ausw�hlen
-			ADCON0bits.CHS2 = 0;
-			ADCON0bits.CHS1 = 0;
-			ADCON0bits.CHS0 = 0;
+			sprintf(LCDtext1, (const far rom char*)"AIn :%#5X %4dd", x,x);
+			sprintf(LCDtext2, (const far rom char*)"AOut :%#5X %4dd", y,y);
+
+			// Kanal 0 auswählen
+			ADCON0 = 0b10000001;
 		}
 
 #ifndef Simulator
 		// Hardware: Ausgabe an LCD
-		ADCON1bits.PCFG3 = 1; // Port Konfiguration
-		ADCON1bits.PCFG2 = 1; // RA3:RA1 wieder digital I/O f�r LCD, nur AN0-Eingang analog
-		ADCON1bits.PCFG1 = 1;
+		// Port Konfiguration
+		ADCON1 = 0b00001110; // RA3:RA1 wieder digital I/O für LCD, nur AN0-Eingang analog
 
 		lcd_gotoxy(1, 1);
-		lcd_printf(Analog_text1);
-		lcd_int(x);
-		lcd_printf(leer);
+		lcd_printf(LCDtext1);
 		lcd_gotoxy(2, 1);
-		lcd_printf(Analog_text2);
-		lcd_int(y);
-		lcd_printf(leer);
+		lcd_printf(LCDtext2);
 
-		ADCON1bits.PCFG3 = 0; // Port Konfiguration
-		ADCON1bits.PCFG2 = 0; // AAAA AAAA
-		ADCON1bits.PCFG1 = 0;
+		// Port Konfiguration AAAA AAAA
+		ADCON1 = 0b00000000;
 
 #else // Simulation: PWM-Periode abwarten + Haltepunkt bei bestimmtem Analogwert erm�glichen
 		while (!PIR1bits.TMR2IF)
