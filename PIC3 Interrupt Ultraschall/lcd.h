@@ -4,19 +4,19 @@
 #ifndef NEUE_PLATINE
 	extern void lcd_init(void );    //Initialize the LCD module per Ocular specifications
 	extern void lcd_clear(void);	// Clear LCD display
-	extern void lcd_printf(unsigned char*);  // Write a constant string to the LCD
+	extern void lcd_printf(char*);  // Write a constant string to the LCD
 	extern void lcd_gotoxy(unsigned char row, unsigned char column);
 	extern void lcd_byte(char num);
 	extern void lcd_int(int num);
-	extern void lcd_putc(unsigned char data);
+	extern void lcd_putc(char data);
 #else
 	extern void lcd_init_new(void );    //Initialize the LCD module per Ocular specifications
 	extern void lcd_clear_new(void);	// Clear LCD display
-	extern void lcd_printf_new(unsigned char*);  // Write a constant string to the LCD
+	extern void lcd_printf_new(char*);  // Write a constant string to the LCD
 	extern void lcd_gotoxy_new(unsigned char row, unsigned char column);
 	extern void lcd_byte_new(char num);
 	extern void lcd_int_new(int num);
-	extern void lcd_putc_new(unsigned char data);
+	extern void lcd_putc_new(char data);
 	
 	#define  lcd_init lcd_init_new
 	#define  lcd_clear lcd_clear_new
