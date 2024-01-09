@@ -1,15 +1,15 @@
-// Hochschule Mannheim / Institut fï¿½r Mikrocomputertechnik und Embedded Systems
+// Hochschule Mannheim / Institut für Mikrocomputertechnik und Embedded Systems
 //
 // Versuch: PIC2  DA-Wandler durch PWM    Dateiname: PIC2_PWM.c
 //
 // Eine am Analogeingang RA0/AN0 vorgegebene Spannung wird digitalisiert,
 // der Wert AnalogIn=xxxx am LCD angezeigt
-// und ï¿½ber eine Pulsweitenmodulation am Ausgang RC2/CCP1 ausgegeben.
+// und über eine Pulsweitenmodulation am Ausgang RC2/CCP1 ausgegeben.
 // Das dort angeschlossene RC-Glied macht daraus wieder eine Analogspannung,
 // die am Eingang RE2/AN7 eingelesen und als Istwert AnalogOut=yyyy angezeigt wird.
 //
-// 08.12.2011 (Poh) Kommentare fï¿½r LCD (Prototypen in lcd.h)
-// 24.05.2011 (Poh) Configuration Bit Settings, Anpassungen fï¿½r NEUE_PLATINE, Includes im Projektverzeichnis
+// 08.12.2011 (Poh) Kommentare für LCD (Prototypen in lcd.h)
+// 24.05.2011 (Poh) Configuration Bit Settings, Anpassungen für NEUE_PLATINE, Includes im Projektverzeichnis
 // 07.06.2020 (Poh) #ifdef Umschaltung zwischen Simulation und Hardware mit LCD
 // 30.06.2020 (Poh) umstrukturiert / AD-Wandlungsstart 1x
 //
@@ -19,44 +19,38 @@
 #pragma config OSC = HS, WDT = OFF, LVP = OFF // HS Oszillator, Watchdog Timer disabled, Low Voltage Programming
 
 #define Simulator // zum Gebrauch mit Hardware auskommentieren
-// Define fï¿½r LCD des neuen, grï¿½nen Demo-Boards:
+// Define für LCD des neuen, grünen Demo-Boards:
 // #define NEUE_PLATINE  // Achtung: define vor include! Bei altem braunem Demo-Board auskommentieren!
 #include "p18f452.h"
-#include "lcd.h" // Enthï¿½lt alle Prototypen fï¿½r das LCD
+#include "lcd.h" // Enthält alle Prototypen für das LCD
 
 void init();
 
 unsigned int x = 0;							   // Analogwert AN0 (Vorgabe durch Poti)
 unsigned int y = 0;							   // Analogwert AN7 (Istwert des PWM-Mittelwerts am RC-Glied)
-unsigned char LCDtext1[20] = "AnalogIn ="; // Analogwert AN0 (Poti)  16 Zeichen pro Zeile
-unsigned char LCDtext2[20] = "AnalogOut="; // Analogwert AN7 (Istwert des PWM-Mittelwerts am RC-Glied)
-unsigned char leer[] = "                ";
+
+unsigned char LCDtext1[20] = "AnalogIn = "; 			// Analogwert AN0 (Poti)  16 Zeichen pro Zeile
+unsigned char LCDtext2[20] = "AnalogOut= ";			 // Analogwert AN7 (Istwert des PWM-Mittelwerts am RC-Glied)
 
 void init()
 {
 	// IO Ports
+	TRISAbits.TRISA0 = 1;		//RA0 als Eingang für Poti
+	TRISEbits.TRISE2 = 1;		//RE2 als Eingang
+	TRISCbits.TRISC2 = 0;		// RC2 als Ausgang für PWM
 
-	TRISAbits.TRISA0=1;		//RA0 als Eingang fÃ¼r Poti
-	TRISEbits.TRISE2=1;		
-	TRISCbits.TRISC2=0;		// RC2 als Ausgang fÃ¼r PWM
 
-	// TRISC = 0xFB; // 0b11111011;
-	// TRISE = 0x7;  // 0b111;
-
-	// // RC2 als Ausgang fÃ¼r PWM
-	// TRISC2 = 0;
-
-#ifndef Simulator // LCD-Initialisierung mit Portzuweisung RA<3:1> und RD<3:0>
-	lcd_init();	  // Alle LCD-Funktionen werden fï¿½r die Simulation herausgenommen,
-	lcd_clear();  // da man sonst hier stecken bleibt.
+#ifndef Simulator 		// LCD-Initialisierung mit Portzuweisung RA<3:1> und RD<3:0>
+	lcd_init();	  		// Alle LCD-Funktionen werden für die Simulation herausgenommen,
+	lcd_clear();  			// da man sonst hier stecken bleibt.
 #endif
 
-	// CCP1 als PWM Modul konfigurieren
-	CCP1CON = 0b00001100;
+	// CCP1 als PWM Modul konfigurieren 0000 1100
+	CCP1CON = 0x0C;
 
 	// Timer 2 Einstellungen 1:4
-	T2CON = 0b00000110;
-	TMR2 = 0xFF // PWM Frequenz einstellen
+	T2CON = 0b00000111;		// 1:1 <1:0> = 00 | 1:4 <1:0> = 1x 
+	TMR2 = 0xFF; // PWM Frequenz einstellen
 
 	// A/D-Umsetzer Einstellungen
 	ADCON0 = 0x81;
@@ -69,7 +63,7 @@ void main()
 	init();
 	while (1)
 	{
-		// A/D-Umsetzung durchfï¿½hren
+		// A/D-Umsetzung durchführen
 		ADCON0bits.GO = 1; // Start A/D conversion
 		while (ADCON0bits.GO); // Wait for conversion to finish
 
@@ -80,14 +74,14 @@ void main()
 			// Berechnung von x
 			x = ADRES >> 6;
 
-			// Duty Cycle fÃ¼r PWM  einstellen
-			CCPR1L = ADRESH;
-
-
-			CCP1CON = CCP1CON | (ADRESL >> 2); //CCp1con hat die LSB von 10bit PWM signal, dann ADRESL als maske verwenden!
+			// Duty Cycle für PWM  einstellen
+			CCPR1L =  ADRESH;
+			
+			//CCP1CON hat die LSB von 10bit PWM signal, dann ADRESL als maske verwenden!
+			CCP1CON = 0x0C | (ADRESL >> 2); 
 			T2CONbits.TMR2ON=1;
 
-			// Kanal 7 auswÃ¤hlen
+			// Kanal 7 auswählen
 			ADCON0 = 0b10111001;		//Fosc/32 und AN7 und ADON = 1
 		}
 		// Analogkanal 7 wurde eingelesen (RC-Ausgang Istwert)
@@ -99,14 +93,14 @@ void main()
 			sprintf(LCDtext1, (const far rom char*)"AIn :%#5X %4dd", x,x);
 			sprintf(LCDtext2, (const far rom char*)"AOut :%#5X %4dd", y,y);
 
-			// Kanal 0 auswÃ¤hlen
+			// Kanal 0 auswählen
 			ADCON0 = 0b10000001;
 		}
 
 #ifndef Simulator
 		// Hardware: Ausgabe an LCD
 		// Port Konfiguration
-		ADCON1 = 0b00001110; // RA3:RA1 wieder digital I/O fÃ¼r LCD, nur AN0-Eingang analog
+		ADCON1 = 0b00001110; // RA3:RA1 wieder digital I/O für LCD, nur AN0-Eingang analog
 
 		lcd_gotoxy(1, 1);
 		lcd_printf(LCDtext1);
@@ -116,10 +110,10 @@ void main()
 		// Port Konfiguration AAAA AAAA
 		ADCON1 = 0b00000000;
 
-#else // Simulation: PWM-Periode abwarten + Haltepunkt bei bestimmtem Analogwert ermï¿½glichen
+#else // Simulation: PWM-Periode abwarten + Haltepunkt bei bestimmtem Analogwert ermöglichen
 		while (!PIR1bits.TMR2IF)
 			;				 // Eine Periode der PWM (Timer 2) abwarten
-		PIR1bits.TMR2IF = 0; // bis der nï¿½chste Analogwert gelesen wird.
+		PIR1bits.TMR2IF = 0; // bis der nächste Analogwert gelesen wird.
 
 		if (y == 0x1FA)
 		{		   // Letzter aus "Stimulus ADRESL pic2pwm.txt" zu lesender AD-Wert
