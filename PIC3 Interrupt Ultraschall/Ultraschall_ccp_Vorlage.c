@@ -26,8 +26,14 @@ unsigned char Stunde = 23;
 unsigned char Minute = 59;
 unsigned char Sekunde = 55;
 
-unsigned int x = 0;
+unsigned int caputure_werte = 0;
 unsigned int i = 0;
+
+//counts = frequency / prescaler / (1 / desired interrupt time) = 4MHz / 4 / (1 / 0.1s) = 10000 counts
+//initial value = 0xFFFF - counts + 1 = 0xFFFF - 10000 + 1 = 55537
+//55537 = 0xD8F1
+unsigned int timer_low = 0xD8;
+unsigned int timer_high = 0xF1;
 
 void time_update(void);
 
@@ -82,8 +88,9 @@ void init(void)
 
 	// lcd initialisieren
 	// PORTB und RB1 aus Ausgang
-	TRISB = 0x00;
+	//TRISB = 0x00;
 	TRISBbits.TRISB1 = 0;
+	TRISBbits.TRISB3 = 1;
 
 	// Timer1 16 bit zugriff kein prescaler 0b10000000
 	T1CON = 0x80;
@@ -93,16 +100,25 @@ void init(void)
 	T3CON = 0x90;
 
 	// Set Timer3 period
-	TMR3H = 0x3C; // High byte
-	TMR3L = 0xB0; // Low byte
+	TMR3H = timer_high; // High byte
+	TMR3L = timer_low; // Low byte
 
 	// CPP2 Modul im Capture-Modus betreiben 0000 0101
 	CCP2CON = 0x05;
 
 	// Interrupt configurieren
-	RCONbits.IPEN = 1; // Enable priority levels on interrupts
+	// Enable priority levels on interrupts
+	RCONbits.IPEN = 1; 
+	// Enable global interrupts
+	INTCONbits.GIE = 1;
+
+	IPR2bits.CCP2IP = 1; //high priority
 	PIR2bits.CCP2IF = 0;
+
+	// Enable Timer3 overflow interrupt
+	IPR2bits.TMR3IP = 0; //low priority
 	PIR2bits.TMR3IF = 0;
+	PIE2bits.TMR3IE = 1;
 
 	T1CONbits.TMR1ON = 1; // Timer1 starten
 	T3CONbits.TMR3ON = 1; // Timer3 starten
@@ -119,25 +135,33 @@ void init(void)
 #pragma interrupt high_prior_InterruptHandler
 void high_prior_InterruptHandler(void)
 {
-	// Siehe Flussdiagramm:
+	//0101 = Capture mode, every rising edge
 	if (CCP2CON == 0x05)
 	{
-		x = CCPR2;
+		//Capture-Werte
+		caputure_werte = CCPR2;
+		//TIMER1 IF zur�cksetzen
 		PIR1bits.TMR1IF = 0;
+		//0100 = Capture mode, every falling edge
 		CCP2CON = 0x04;
 	}
 	else
 	{
+		//TIMER1 Overflow
 		if (PIR1bits.TMR1IF == 1)
 		{
+			//Maximalwert
 			Abstand = 0xFFFF;
 		}
 		else
 		{
-			Abstand = (CCPR2 - x) / 58;
+			//abstrand berechnen
+			Abstand = (CCPR2 - caputure_werte) / 58;
 		}
+		//flankenrichtung steigende
 		CCP2CON = 0x05;
 	}
+	//interrupt-flag zur�cksetzen
 	PIR2bits.CCP2IF = 0;
 }
 
@@ -150,8 +174,9 @@ void low_prior_InterruptHandler(void)
 {
 	// Siehe Flussdiagramm:
 	// Startwert f�r 100ms Intervalle in Timer3 laden
-	TMR3L = 0x3C;
-	TMR3H = 0xB0;
+
+	TMR3H = timer_high;
+	TMR3L = timer_low;
 
 	if (Abstand != 0xFFFF)
 	{
@@ -182,12 +207,14 @@ void low_prior_InterruptHandler(void)
 	// weiter siehe Flussdiagramm ...
 	TMR3L = 0;
 	TMR3H = 0;
+
 	PORTBbits.RB1 = 1;
 	for (i = 0; i < 10; i++)
 	{
 		Nop();
 	}
 	PORTBbits.RB1 = 0;
+
 	PIR2bits.TMR3IF = 0;
 }
 void main()
