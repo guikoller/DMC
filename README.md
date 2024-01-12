@@ -6,3 +6,4 @@
 ## Pulsweitenmodulation
 
 ## Interrupt / Ultraschall
+- Entfernungsmessung mittels eines Ultraschallsensors und Zeituhr
