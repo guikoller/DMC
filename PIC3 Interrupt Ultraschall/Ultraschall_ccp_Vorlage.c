@@ -1,5 +1,5 @@
 // Hochschule Mannheim
-// Institut fï¿½r Embedded Systems
+// Institut f?r Embedded Systems
 // PIC3_Ultraschall_ccp: Entfernungsmessung per Ultraschall + Echtzeituhr
 // 13.12.2023 (Poh) sprintf / char LCDtext1+2
 
@@ -9,7 +9,7 @@
 #pragma config OSC = HS, WDT = OFF, LVP = OFF, CCP2MUX = OFF // HS Oszillator, Watchdog Timer disabled, Low Voltage Programming
 
 #define Simulator // zum Gebrauch mit Hardware auskommentieren
-// Define fï¿½r LCD des neuen, grï¿½nen Demo-Boards:
+// Define f?r LCD des neuen, gr?nen Demo-Boards:
 // #define NEUE_PLATINE  // Achtung: define vor include! Bei altem braunem Demo-Board auskommentieren!
 
 #include "p18f452.h"
@@ -22,18 +22,19 @@ char LCDtext2[20] = " Ultraschall    "; // LCD Zeile 2: Echtzeituhr
 unsigned int Abstand = 0; // Abstand des Objekts
 
 unsigned char Vorzaehler = 0; // Uhrenvariablen:
-unsigned char Stunde = 23;
-unsigned char Minute = 59;
-unsigned char Sekunde = 55;
+unsigned char Stunde = 0;
+unsigned char Minute = 0;
+unsigned char Sekunde = 0;
 
 unsigned int caputure_werte = 0;
 unsigned int i = 0;
 
-//counts = frequency / prescaler / (1 / desired interrupt time) = 4MHz / 4 / (1 / 0.1s) = 10000 counts
-//initial value = 0xFFFF - counts + 1 = 0xFFFF - 10000 + 1 = 55537
-//55537 = 0xD8F1
-unsigned int timer_low = 0xD8;
-unsigned int timer_high = 0xF1;
+//100000 counts (F4240) -> FFFF - F424 = 3035
+//Teilerfaktor: 1MHz * 100ms = 1000000Hz * 0,1s = 100000
+//mit Prescaler 2: 50000
+//Timer-Reload-Wert = 0x10000 - 50000 = 0x3CB0
+unsigned char timer_high = 0x3C;
+unsigned char timer_low = 0xB0;
 
 void time_update(void);
 
@@ -42,23 +43,7 @@ void low_prior_InterruptHandler(void);
 
 void time_update(void)
 {
-	Vorzaehler++;
-	if (Vorzaehler == 10)
-	{
-		if (Sekunde == 60) // bei 60 Sekunden
-		{
-			Sekunde = 0;	  // Sekunden auf 0 setzen
-			Minute++;		  // Minuten hochzï¿½hlen
-			if (Minute == 60) // bei 60 Minuten
-			{
-				Minute = 0;		  // Minuten auf 0 setzen
-				Stunde++;		  // Stunden hochzï¿½hlen
-				if (Stunde == 24) // bei 24 Stunden
-					Stunde = 0;	  // Stunden auf 0 setzen
-			}
-		}
-		Sekunde++;
-	}
+	
 }
 
 #pragma code high_prior_InterruptVector = 0x08
@@ -88,16 +73,16 @@ void init(void)
 
 	// lcd initialisieren
 	// PORTB und RB1 aus Ausgang
-	//TRISB = 0x00;
+	PORTB = 0x00;
 	TRISBbits.TRISB1 = 0;
 	TRISBbits.TRISB3 = 1;
 
 	// Timer1 16 bit zugriff kein prescaler 0b10000000
-	T1CON = 0x80;
+	T1CON = 0x84;
 
-	// TIMER3 to konfigurieren, dass 100ms Intervalle entstehen und TIMER1 fÃ¼r den CPP2-Capture verwendet wird
-	//  Timer3 ON, 16-bit mode, 1:8 prescaler
-	T3CON = 0x90;
+	// TIMER3 to konfigurieren, dass 100ms Intervalle entstehen und TIMER1 für den CPP2-Capture verwendet wird
+	//  Timer3, 16-bit mode, 1:8 prescaler 1000 0000
+	T3CON = 0x94;
 
 	// Set Timer3 period
 	TMR3H = timer_high; // High byte
@@ -110,10 +95,14 @@ void init(void)
 	// Enable priority levels on interrupts
 	RCONbits.IPEN = 1; 
 	// Enable global interrupts
-	INTCONbits.GIE = 1;
+	INTCONbits.GIEH = 1;
+	INTCONbits.GIEL = 1;
+	// Interrupts aktivieren 1100 0000
+	//INTCON = 0xC0;
 
 	IPR2bits.CCP2IP = 1; //high priority
 	PIR2bits.CCP2IF = 0;
+	PIE2bits.CCP2IE = 1;
 
 	// Enable Timer3 overflow interrupt
 	IPR2bits.TMR3IP = 0; //low priority
@@ -123,8 +112,6 @@ void init(void)
 	T1CONbits.TMR1ON = 1; // Timer1 starten
 	T3CONbits.TMR3ON = 1; // Timer3 starten
 
-	// Interrupts aktivieren 1100 0000
-	INTCON = 0xC0;
 }
 
 // hochpriorisierte ISR:
@@ -140,7 +127,7 @@ void high_prior_InterruptHandler(void)
 	{
 		//Capture-Werte
 		caputure_werte = CCPR2;
-		//TIMER1 IF zurï¿½cksetzen
+		//TIMER1 IF zur?cksetzen
 		PIR1bits.TMR1IF = 0;
 		//0100 = Capture mode, every falling edge
 		CCP2CON = 0x04;
@@ -161,22 +148,24 @@ void high_prior_InterruptHandler(void)
 		//flankenrichtung steigende
 		CCP2CON = 0x05;
 	}
-	//interrupt-flag zurï¿½cksetzen
+	//interrupt-flag zur?cksetzen
 	PIR2bits.CCP2IF = 0;
 }
 
 // niedrigpriorisierte ISR:
 // 100ms-Intervalle von Timer 3 verwenden, um die Abstandsmessung darzustellen.
-// Die Intervalle dienen zugleich als Zeitbasis fï¿½r die Uhr.
+// Die Intervalle dienen zugleich als Zeitbasis f?r die Uhr.
 #pragma code
 #pragma interruptlow low_prior_InterruptHandler
 void low_prior_InterruptHandler(void)
 {
 	// Siehe Flussdiagramm:
-	// Startwert fï¿½r 100ms Intervalle in Timer3 laden
+	// Startwert f?r 100ms Intervalle in Timer3 laden
 
-	TMR3H = timer_high;
-	TMR3L = timer_low;
+//	TMR3H = timer_high;
+//	TMR3L = timer_low;
+	TMR3H = 0x3C;
+	TMR3L = 0xB0;
 
 	if (Abstand != 0xFFFF)
 	{
@@ -192,8 +181,25 @@ void low_prior_InterruptHandler(void)
 	lcd_printf(LCDtext1); // LCDtext1 Abstand: ...
 #endif
 
-	// Zï¿½hlung der Echtzeit-Uhr
-	time_update();
+	// Z?hlung der Echtzeit-Uhr
+	Vorzaehler++;
+	if (Vorzaehler == 10)
+	{
+		Vorzaehler = 0;
+		Sekunde++;
+		if (Sekunde == 60) // bei 60 Sekunden
+		{
+			Sekunde = 0;	  // Sekunden auf 0 setzen
+			Minute++;		  // Minuten hochz?hlen
+			if (Minute == 60) // bei 60 Minuten
+			{
+				Minute = 0;		  // Minuten auf 0 setzen
+				Stunde++;		  // Stunden hochz?hlen
+				if (Stunde == 24) // bei 24 Stunden
+					Stunde = 0;	  // Stunden auf 0 setzen
+			}
+		}
+	}
 	// Jede Sekunde die Uhrzeit anzeigen
 	sprintf(LCDtext2, (const far rom char *)"Zeit: %02d:%02d:%02d  ", Stunde, Minute, Sekunde);
 
@@ -205,14 +211,22 @@ void low_prior_InterruptHandler(void)
 #endif
 
 	// weiter siehe Flussdiagramm ...
-	TMR3L = 0;
-	TMR3H = 0;
+	TMR1H = 0;
+	TMR1L = 0;
 
 	PORTBbits.RB1 = 1;
-	for (i = 0; i < 10; i++)
-	{
-		Nop();
-	}
+	
+	Nop();	
+	Nop();
+	Nop();	
+	Nop();	
+	Nop();
+	Nop();	
+	Nop();
+	Nop();	
+	Nop();	
+	Nop();
+
 	PORTBbits.RB1 = 0;
 
 	PIR2bits.TMR3IF = 0;
